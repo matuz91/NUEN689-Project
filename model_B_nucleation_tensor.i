@@ -3,6 +3,7 @@
 # check this file for possible stress calc
 ## -> modules/combined/examples/phase_field-mechanics
 ### interfface_stress.i
+### C_ijkl taken from combined/test/tests/finite_strain_elasticity_test.i
 [Mesh]
   type = GeneratedMesh
   dim = 2
@@ -14,6 +15,7 @@
   ymax = 256
   uniform_refine = 2
   elem_type = QUAD4
+  # due to uniform refinement and adaptivity
   skip_partitioning = true
 []
 
@@ -43,14 +45,14 @@
   [./eta]
   [../]
 # added tensor mechanics
-[./disp_x]
-  order = FIRST
-  family = LAGRANGE
-[../]
-[./disp_y]
-  order = FIRST
-  family = LAGRANGE
-[../]
+  [./disp_x]
+    order = FIRST
+    family = LAGRANGE
+  [../]
+  [./disp_y]
+    order = FIRST
+    family = LAGRANGE
+  [../]
 []
 # aux varaibles to track the free energy change (must decrease with time)
 [AuxVariables]
@@ -103,6 +105,15 @@
   [../]
 []
 
+## might use this to set my nucleation noise source
+## in conjuction with ConservedLangevinNoise
+# [Functions]
+#   [./mask_func]
+#     type = ParsedFunction
+#     value = 'r:=sqrt((x-5)^2+(y-5)^2); if (r<3, 1.0, 0.0)'
+#   [../]
+# []
+
 [BCs]
   [./Periodic]
     [./all]
@@ -110,13 +121,13 @@
     [../]
   [../]
   [./left]
-    type = DirichletBC
+    type = PresetBC
     variable = disp_x
     boundary = left
     value = 0.0
   [../]
   [./bottom]
-    type = DirichletBC
+    type = PresetBC
     variable = disp_y
     boundary = bottom
     value = 0.0
@@ -146,9 +157,15 @@
   [../]
   [./conserved_langevin] # Adds fluctuations in the flux without changing the total concentration
     type = ConservedLangevinNoise
-    amplitude = 0.02
+    # amplitude will be varied for param study
+    # source term for frenkel pair defects increase
+    amplitude = 2 # initially .02
     variable = w
     noise = normal_noise
+    use_displaced_mesh = true
+    # and additional parameter
+    #  error displacements unused parameter
+    # displacements = 'disp_x disp_y'
   [../]
   # Allen-Cahn equation with c as coupled variable
   [./AC_bulk]
@@ -251,6 +268,7 @@
     function = if(c>0.9,1.0,0)
   [../]
 # tensor mechanics
+# taken from combined/test/tests/finite_strain_elasticity_test.i
 [./elasticity_tensor]
   type = ComputeElasticityTensor
   block = '0'
@@ -371,6 +389,6 @@
 [Outputs]
   exodus = true
   csv = true
-  interval = 1
-  file_base = nucleation_model_b
+  # interval = 1
+  file_base = model_b_tensor_amp2
 []

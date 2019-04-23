@@ -146,8 +146,7 @@
     value = 10.0
   [../]
   [./TensorMechanics]
-    disp_x = disp_x
-    disp_y = disp_y
+    displacements = 'disp_x disp_y' 
   [../]
 []
 
@@ -219,8 +218,7 @@
   [./strain]
     type = ComputeSmallStrain
     block = 0
-    disp_x = disp_x
-    disp_y = disp_y
+    displacements = 'disp_x disp_y'
   [../]
 #######################################################
 []
@@ -312,5 +310,5 @@
   exodus = true
   csv = true
   interval = 1
-  file_base = nucleation_model_b
+  file_base = nucleation_conc_tensor
 []

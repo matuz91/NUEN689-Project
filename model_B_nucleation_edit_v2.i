@@ -1,5 +1,7 @@
 # This is a template for simulating nucleation in a phase-field model B
 # Note that the fluctuations should still leave c conserved
+Body_Force = 10000
+
 [Mesh]
   type = GeneratedMesh
   dim = 2
@@ -20,29 +22,11 @@
   [../]
   [./eta]
   [../]
-  # FROM ComputeConcentrationDependentElasticityTensor deck
-  [./disp_x]
-    order = FIRST
-    family = LAGRANGE
-  [../]
-  [./disp_y]
-    order = FIRST
-    family = LAGRANGE
-  [../]
 ##############################################################
 []
 # aux varaibles to track the free energy change (must decrease with time)
 [AuxVariables]
   [./total_F]
-    order = CONSTANT
-    family = MONOMIAL
-  [../]
-  # FROM ComputeConcentrationDependentElasticityTensor deck
-  [./C11_aux]
-    order = CONSTANT
-    family = MONOMIAL
-  [../]
-  [./s11_aux]
     order = CONSTANT
     family = MONOMIAL
   [../]
@@ -77,19 +61,6 @@
     [./all]
       auto_direction = 'x y'
     [../]
-  [../]
-### newly added for tensor stuff
-  [./left]
-    type = PresetBC
-    variable = disp_x
-    boundary = left
-    value = 0.0
-  [../]
-  [./bottom]
-    type = PresetBC
-    variable = disp_y
-    boundary = bottom
-    value = 0.0
   [../]
 #####################################
 []
@@ -143,11 +114,7 @@
   [/BodyForce]
     type = BodyForce
     variable = c
-    value = 10.0
-  [../]
-  [./TensorMechanics]
-    disp_x = disp_x
-    disp_y = disp_y
+    value = ${Body_Force}
   [../]
 []
 
@@ -158,23 +125,6 @@
     interfacial_vars = 'c eta'
     kappa_names = 'kappa_c kappa_op'
   [../]
-  # FROM ComputeConcentrationDependentElasticityTensor deck
-  [./matl_s11]
-     type = RankTwoAux
-     variable = s11_aux
-     rank_two_tensor = stress
-     index_i = 0
-     index_j = 0
-   [../]
-   [./matl_C11]
-     type = RankFourAux
-     variable = C11_aux
-     rank_four_tensor = elasticity_tensor
-     index_l = 0
-     index_j = 0
-     index_k = 0
-     index_i = 0
-   [../]
 ###############################################################
 []
 
@@ -201,26 +151,6 @@
     f_name = prec_indic
     args = c
     function = if(c>0.9,1.0,0)
-  [../]
-# FROM ComputeConcentrationDependentElasticityTensor deck
-  [./elasticity_tensor]
-    type = ComputeConcentrationDependentElasticityTensor
-    block = 0
-    c = c
-    C1_ijkl = '6 6'
-    C0_ijkl = '1 1'
-    fill_method1 = symmetric_isotropic
-    fill_method0 = symmetric_isotropic
-  [../]
-  [./stress]
-    type = ComputeLinearElasticStress
-    block = 0
-  [../]
-  [./strain]
-    type = ComputeSmallStrain
-    block = 0
-    disp_x = disp_x
-    disp_y = disp_y
   [../]
 #######################################################
 []
@@ -257,15 +187,6 @@
     type = ElementIntegralVariablePostprocessor
     variable = 'eta'
   [../]
-  [./stress_s11_aux]
-    type = ElementAverageValue
-    variable = s11_aux
-  [../]
-  [./elasticity_c11_aux]
-    type = ElementAverageValue
-    variable = C11_aux
-  [../]
-
 []
 
 [Preconditioning]
@@ -312,5 +233,5 @@
   exodus = true
   csv = true
   interval = 1
-  file_base = nucleation_model_b
+  file_base = 'nucleation_edit2_BodyForce_${Body_Force}'
 []
