@@ -1,18 +1,17 @@
-# This simulates the nucleation and growth of voids under irradiation in a ploycrystalline material
-Body_Force = 1e-1
+# modified modelB_2particle including bodyforce irrad from irrad_Hex_poly.i deck,
+# model_C_example conserved variables, and TensorMechanics from inclusion.i deck
+Body_Force = 10
 
 [Mesh]
   type = GeneratedMesh
   dim = 2
   nx = 64
   ny = 64
-  nz = 0
   xmin = 0
-  xmax = 128
+  xmax = 256
   ymin = 0
-  ymax = 128
-  zmax = 0
-  uniform_refine = 1
+  ymax = 256
+  uniform_refine = 2
   elem_type = QUAD4
 []
 
@@ -20,7 +19,6 @@ Body_Force = 1e-1
   block = 0
   op_num = 3
   var_name_base = eta
-  displacements = 'disp_x disp_y'
 []
 
 [Variables]
@@ -28,6 +26,7 @@ Body_Force = 1e-1
   [../]
   [./w]
   [../]
+  # from irrad_Hex_poly.i
   [./eta0]
   [../]
   [./eta1]
@@ -36,6 +35,8 @@ Body_Force = 1e-1
   [../]
   [./etab]
   [../]
+  ##########################################################
+  # FROM ComputeConcentrationDependentElasticityTensor deck
   [./disp_x]
     order = FIRST
     family = LAGRANGE
@@ -44,17 +45,21 @@ Body_Force = 1e-1
     order = FIRST
     family = LAGRANGE
   [../]
+##############################################################
 []
-
+# aux varaibles to track the free energy change (must decrease with time)
 [AuxVariables]
   [./bnds]
     order = FIRST
     family = LAGRANGE
   [../]
+  # FROM ComputeConcentrationDependentElasticityTensor deck
   [./s11_aux]
     order = CONSTANT
     family = MONOMIAL
   [../]
+  #################################################################
+  # from inclusion.i deck
   [./s12_aux]
     order = CONSTANT
     family = MONOMIAL
@@ -103,68 +108,78 @@ Body_Force = 1e-1
     order = CONSTANT
     family = MONOMIAL
   [../]
-[]
-
-[UserObjects]
-  [./hex_ic]
-    type = PolycrystalHex
-    coloring_algorithm = bt
-    grain_num = 36
-    x_offset = 0.0
-    output_adjacency_matrix = false
+#############################################################
+  # the chemical potential gradients
+  [./dwdx]
+    order = CONSTANT
+    family = MONOMIAL
   [../]
-  [./normal_noise]
-    type = ConservedNormalNoise
+  [./dwdy]
+    order = CONSTANT
+    family = MONOMIAL
   [../]
-  [./grain_tracker]
-    type = GrainTracker
-    threshold = 0.2
-    compute_var_to_feature_map = true
-    execute_on = 'initial timestep_begin'
-    flood_entity_type = ELEMENTAL
+  # the flux
+  [./jx]
+    order = CONSTANT
+    family = MONOMIAL
+  [../]
+  [./jy]
+    order = CONSTANT
+    family = MONOMIAL
+  [../]
+  [./j_tot]
+    order = CONSTANT
+    family = MONOMIAL
   [../]
 []
 
 [ICs]
+  # from irrad_Hex_poly.i
   [./PolycrystalICs]
     [./PolycrystalColoringIC]
       polycrystal_ic_uo = hex_ic
     [../]
   [../]
   [./etab] #variable representing the bubble/pore (or second-phase particle)
-  type = RandomIC
-  variable = etab
-   max = 0.003
-   min = 0.001
+    type = RandomIC
+    variable = etab
+     max = 0.003
+     min = 0.001
   [../]
-
-  [./IC_c] #vacancy/solute concentration
-  type = RandomIC
-  variable = c
-   max = 3e-6
-   min = 1e-6
+  [./IC_c]
+    type = SpecifiedSmoothCircleIC
+    variable = c
+    x_positions = '50 83'
+    y_positions = '64 64'
+    z_positions = '0 0'
+    radii = '10 15'
+    invalue = 1.0
+    outvalue = 0.00786 # equilibrium solubility with particle of radius 15
   [../]
-
 []
 
 [BCs]
   [./Periodic]
-    [./All]
+    [./all]
       auto_direction = 'x y'
     [../]
   [../]
-  [./bottom_y]
-    type = PresetBC
-    variable = disp_y
-    boundary = bottom
-    value = 0
-  [../]
-  [./left_x]
+### newly added for tensor stuff
+  [./left]
     type = PresetBC
     variable = disp_x
     boundary = left
-    value = 0
+    value = 0.0
   [../]
+  [./bottom]
+    type = PresetBC
+    variable = disp_y
+    boundary = bottom
+    value = 0.0
+  [../]
+  ## missfit strain workshop 9
+  ## iradiation sent by email
+#####################################
 []
 
 [Kernels]
@@ -255,6 +270,7 @@ Body_Force = 1e-1
     value = ${Body_Force}  # dose rate
   [../]
   [./TensorMechanics]
+    displacements = 'disp_x disp_y'
   [../]
 []
 
@@ -264,73 +280,132 @@ Body_Force = 1e-1
     variable = bnds
     execute_on = timestep_end
   [../]
+  # FROM ComputeConcentrationDependentElasticityTensor deck
   [./matl_s11]
-    type = RankTwoAux
-    rank_two_tensor = stress
-    index_i = 0
-    index_j = 0
-    variable = s11_aux
+     type = RankTwoAux
+     variable = s11_aux
+     rank_two_tensor = stress
+     index_i = 0
+     index_j = 0
+   [../]
+   # from inclusion.i
+   [./matl_s12]
+     type = RankTwoAux
+     rank_two_tensor = stress
+     index_i = 0
+     index_j = 1
+     variable = s12_aux
+   [../]
+   [./matl_s22]
+     type = RankTwoAux
+     rank_two_tensor = stress
+     index_i = 1
+     index_j = 1
+     variable = s22_aux
+   [../]
+   [./matl_e11]
+     type = RankTwoAux
+     rank_two_tensor = total_strain
+     index_i = 0
+     index_j = 0
+     variable = e11_aux
+   [../]
+   [./matl_e12]
+     type = RankTwoAux
+     rank_two_tensor = total_strain
+     index_i = 0
+     index_j = 1
+     variable = e12_aux
+   [../]
+   [./matl_e22]
+     type = RankTwoAux
+     rank_two_tensor = total_strain
+     index_i = 1
+     index_j = 1
+     variable = e22_aux
+   [../]
+   [./matl_e11_an]
+     type = RankTwoAux
+     rank_two_tensor = strain_an
+     index_i = 0
+     index_j = 0
+     variable = e11_an
+   [../]
+   [./matl_e12_an]
+     type = RankTwoAux
+     rank_two_tensor = strain_an
+     index_i = 0
+     index_j = 1
+     variable = e12_an
+   [../]
+   [./matl_e22_an]
+     type = RankTwoAux
+     rank_two_tensor = strain_an
+     index_i = 1
+     index_j = 1
+     variable = e22_an
+   [../]
+   [./matl_fel_an]
+     type = MaterialRealAux
+     variable = fel_an
+     property = fel_an_mat
+   [../]
+###############################################################
+   [./dwdx]
+     type = VariableGradientComponent
+     variable = dwdx
+     gradient_variable = w
+     component = x
+   [../]
+   [./dwdy]
+     type = VariableGradientComponent
+     variable = dwdy
+     gradient_variable = w
+     component = y
+   [../]
+   [./jx]
+     type = ParsedAux
+     variable = jx
+     args = 'dwdx'
+     function = '-1.0*dwdx'
+   [../]
+   [./jy]
+     type = ParsedAux
+     variable = jy
+     args = 'dwdy'
+     function = '-1.0*dwdy'
+   [../]
+   [./j_tot]
+     type = ParsedAux
+     variable = j_tot
+     args = 'jx jy'
+     function = 'sqrt(jx^2+jy^2)'
+   [../]
+[]
+
+[UserObjects]
+  [./hex_ic]
+    type = PolycrystalHex
+    # dont change to jp otherwise it will crash
+# (GlobalParams/op_num):
+# Unable to find a valid grain to op coloring, Make sure you have created enough variables to hold a
+# valid polycrystal initial condition (no grains represented by the same variable should be allowed to
+# touch, ~8 for 2D, ~25 for 3D)?
+
+    coloring_algorithm = bt
+    grain_num = 36
+    x_offset = 0.0
+    output_adjacency_matrix = false
   [../]
-  [./matl_s12]
-    type = RankTwoAux
-    rank_two_tensor = stress
-    index_i = 0
-    index_j = 1
-    variable = s12_aux
+  [./normal_noise]
+    type = ConservedNormalNoise
   [../]
-  [./matl_s22]
-    type = RankTwoAux
-    rank_two_tensor = stress
-    index_i = 1
-    index_j = 1
-    variable = s22_aux
-  [../]
-  [./matl_e11]
-    type = RankTwoAux
-    rank_two_tensor = total_strain
-    index_i = 0
-    index_j = 0
-    variable = e11_aux
-  [../]
-  [./matl_e12]
-    type = RankTwoAux
-    rank_two_tensor = total_strain
-    index_i = 0
-    index_j = 1
-    variable = e12_aux
-  [../]
-  [./matl_e22]
-    type = RankTwoAux
-    rank_two_tensor = total_strain
-    index_i = 1
-    index_j = 1
-    variable = e22_aux
-  [../]
-  [./matl_e11_an]
-    type = RankTwoAux
-    rank_two_tensor = strain_an
-    index_i = 0
-    index_j = 0
-    variable = e11_an
-  [../]
-  [./matl_e12_an]
-    type = RankTwoAux
-    rank_two_tensor = strain_an
-    index_i = 0
-    index_j = 1
-    variable = e12_an
-  [../]
-  [./matl_e22_an]
-    type = RankTwoAux
-    rank_two_tensor = strain_an
-    index_i = 1
-    index_j = 1
-    variable = e22_an
-  [../]
-  [./matl_fel_an]
-    type = MaterialRealAux
-    variable = fel_an
-    property = fel_an_mat
+  [./grain_tracker]
+    type = GrainTracker
+    threshold = 0.2
+    compute_var_to_feature_map = true
+    execute_on = 'initial timestep_begin'
+    flood_entity_type = ELEMENTAL
   [../]
 []
 
@@ -338,7 +413,6 @@ Body_Force = 1e-1
   [./FreeEng]
     type = DerivativeParsedMaterial
     args = 'c eta1 eta0 etab eta2'
-    block = 0
     constant_names = 'a s g b'
     constant_expressions = '20.0 1.50 1.50 2.0'
     function ='sumeta:=eta0^2+eta1^2+eta2^2+etab^2;f0:=etab^2/sumeta;f2:=a*(c-f0)^2;f3:=1.0/4.0+1.0/4.0*eta1^4-1.0/2.0*eta1^2+1.0/4.0*eta0^4-1.0/2.0*eta0^2+1.0/4.0*eta2^4-1.0/2.0*eta2^2+1.0/4.0*etab^4-1.0/2.0*etab^2;f4:=s*(etab^2*eta1^2+etab^2*eta0^2+etab^2*eta2^2)+g*(eta1^2*eta0^2+eta1^2*eta2^2+eta0^2*eta2^2);f:=f2+b*(f3+f4);f'
@@ -404,18 +478,21 @@ Body_Force = 1e-1
 []
 
 [Postprocessors]
-  [./precipitate_area]      # Area of precipitate
-    type = ElementIntegralMaterialProperty
-    mat_prop = prec_indic
-    execute_on = 'TIMESTEP_END'
-  [../]
   [./_dt]
     # time step
     type = TimestepSize
   [../]
+  [./nonlinear_its]
+    # number of nonlinear iterations at each timestep
+    type = NumNonlinearIterations
+  [../]
   [./ElementInt_c]
     type = ElementIntegralVariablePostprocessor
     variable = c
+  [../]
+  [./precipitate_area]      # Area of precipitate
+    type = ElementIntegralMaterialProperty
+    mat_prop = prec_indic
   [../]
   [./num_precipitates]          # Number of precipitates
     type = FeatureFloodCount
@@ -448,8 +525,21 @@ Body_Force = 1e-1
   [../]
 []
 
+[VectorPostprocessors]
+  # The numerical values of the variables/auxvariables across the centerline
+  [./line_values]
+   type =  LineValueSampler
+    start_point = '0 64 0'
+    end_point = '256 64 0'
+    variable = 'c w j_tot'
+    num_points = 257
+    sort_by =  id
+    execute_on = 'TIMESTEP_END'
+  [../]
+[]
+
 [Preconditioning]
-  [./SMP]
+  [./SMP] # to produce the complete perfect Jacobian
     type = SMP
     full = true
   [../]
@@ -457,36 +547,35 @@ Body_Force = 1e-1
 
 [Executioner]
   type = Transient
-  nl_max_its = 25
+  nl_max_its = 15
   scheme = bdf2
   solve_type = NEWTON
   petsc_options_iname = -pc_type
   petsc_options_value = asm
-  l_max_its = 50
+  l_max_its = 35
   l_tol = 1.0e-3
   nl_rel_tol = 1.0e-7
   start_time = 0.0
   num_steps = 200
   nl_abs_tol = 1e-8
-  dtmax = 1.0
   [./TimeStepper]
     type = IterationAdaptiveDT
     dt = 1e-3
-    growth_factor = 1.2
-    cutback_factor = 0.75
-    optimal_iterations = 6
+    growth_factor = 1.5
+    cutback_factor = 0.5
+    #optimal_iterations = 6
   [../]
   [./Adaptivity]
     refine_fraction = 0.5
     coarsen_fraction = 0.01
     max_h_level = 3
-    initial_adaptivity = 1
+    initial_adaptivity = 2
   [../]
 []
 
 [Outputs]
-    exodus = true
-    csv = true
-    interval = 1
-    file_base = 'inclusion_v3_src_${Body_Force}'
+  exodus = true
+  csv = true
+  #interval = 1
+  file_base = 'inclusion_2_particle_src_${Body_Force}'
 []
